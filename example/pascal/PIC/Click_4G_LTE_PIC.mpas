@@ -1,0 +1,136 @@
+{*
+Example for 4G_LTE Click
+
+    Date          : Nov 2017.
+    Author        : MikroE Team
+
+Test configuration PIC :
+    
+    MCU             : P18F87K22
+    Dev. Board      : EasyPIC PRO v7
+    PIC Compiler ver : v7.1.0.0
+
+---
+
+Description :
+
+The application is composed of three sections :
+
+- System Initialization - Initializes all necessary GPIO pins, UART used for
+the communcation with GSM module and UART used for infromation logging
+- Application Initialization - Initializes driver, power on module and sends few
+command for the default module configuration
+- Application Task - running in parallel core state machine and checks for call flag. 
+If call detected parser will hang up call.
+
+Additional Functions :
+
+All additional functions such as timer initialization and default handler. 
+
+Notes :
+
+- Echo must be turned off for succefull parsing. ( ATE0 )
+- UART polling works much better with HFC enabled.
+- In case of usage of other MCUs Timer initialization must be adjusted according to your MCU.
+
+*}
+program Click_C4GLTE_PIC;
+
+uses Click_4G_LTE_types, Click_4G_LTE_config, Click_4G_LTE_timer;
+
+var
+    // COMMANDS
+    C4GLTE_AT : string[3];
+    C4GLTE_HANGUP : string[4];
+    C4GLTE_ECHO_OFF : string[5];
+    C4GLTE_FORMAT_DEFAULT : string[10];
+    C4GLTE_HFC_ENABLE : string[11];
+
+    // CALLER FLAG
+    callFlag : uint8_t; 
+
+procedure c4glte_default_handler(rsp : ^uint8_t; evArgs : ^uint8_t);
+var
+    ptr_rsp  : ^char;
+
+begin
+    ptr_rsp := rsp + 2;
+
+    if (ptr_rsp^ = 82) then
+    begin
+        callFlag := 1; 
+    end; 
+
+    mikrobus_logWrite( ptr_rsp - 2, _LOG_TEXT );
+
+end;
+
+
+procedure systemInit(); 
+begin
+    C4GLTE_AT := 'AT';
+    C4GLTE_HANGUP := 'ATH';
+    C4GLTE_ECHO_OFF := 'ATE0';
+    C4GLTE_FORMAT_DEFAULT := 'AT+CMGF=1';
+    C4GLTE_HFC_ENABLE := 'AT+IFC=2,2';
+
+    callFlag := 0;
+    
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_AN_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_PWM_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_INT_PIN, _GPIO_INPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_RST_PIN, _GPIO_OUTPUT );
+    mikrobus_gpioInit( _MIKROBUS1, _MIKROBUS_CS_PIN, _GPIO_OUTPUT );
+    mikrobus_uartInit(_MIKROBUS1, @_C4GLTE_UART_CFG[0]); 
+    mikrobus_logInit(_MIKROBUS3, 9600); 
+
+end;
+
+procedure applicationInit(); 
+begin
+
+// TIMER INIT
+    c4glte_configTimer();  
+
+// DRIVER INIT
+    c4glte_uartDriverInit(T_C4GLTE_P(@_MIKROBUS1_GPIO), T_C4GLTE_P(@_MIKROBUS1_UART)); 
+    c4glte_coreInit(@c4glte_default_handler, 1500);
+
+// MODULE POWER ON
+    c4glte_hfcEnable(true); 
+    c4glte_modulePower(true); 
+
+// MODULE INIT
+    c4glte_cmdSingle(@C4GLTE_AT[0]);
+    c4glte_cmdSingle(@C4GLTE_AT[0]);
+    c4glte_cmdSingle(@C4GLTE_AT[0]); 
+    c4glte_cmdSingle(@C4GLTE_ECHO_OFF[0]); 
+    c4glte_cmdSingle(@C4GLTE_HFC_ENABLE[0]); 
+    c4glte_cmdSingle(@C4GLTE_FORMAT_DEFAULT[0]); 
+
+end;
+
+procedure applicationTask(); 
+begin
+
+    c4glte_process(); 
+
+    if ((0 <> callFlag)) then 
+    begin
+        c4glte_cmdSingle(@C4GLTE_HANGUP[0]); 
+        Delay_ms(3000); 
+
+        callFlag := 0; 
+    end;
+end;
+
+begin
+
+    systemInit(); 
+    applicationInit(); 
+    while (1) do 
+    begin 
+        applicationTask(); 
+    end;
+
+end.

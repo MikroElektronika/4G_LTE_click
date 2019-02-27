@@ -1,0 +1,25 @@
+'
+' Use mikroE Timer Calculator to generate proper timer configuration
+' and timer ISR.
+'
+' https://www.mikroe.com/timer-calculator
+'
+module Click_4G_LTE_timer
+
+include Click_4G_LTE_types
+    
+sub procedure c4glte_configTimer() 
+
+implements
+
+sub procedure c4glte_configTimer() 
+
+end sub
+
+sub procedure Timer_interrupt() 
+
+    c4glte_tick() 
+
+end sub
+
+end.
